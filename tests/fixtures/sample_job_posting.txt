@@ -1,0 +1,30 @@
+Senior Backend Engineer — DataFlow Systems
+
+About Us:
+DataFlow Systems is a leading provider of real-time data infrastructure solutions. Our platform processes billions of events daily for Fortune 500 companies.
+
+About the Role:
+We're looking for a Senior Backend Engineer to join our Platform team. You'll be building the next generation of our event processing pipeline, working with distributed systems at scale.
+
+Requirements:
+- 5+ years of experience in backend software development
+- Strong proficiency in Python and at least one other backend language (Go preferred)
+- Deep experience with distributed systems and microservices architecture
+- Hands-on experience with message queues (Kafka, RabbitMQ, or similar)
+- Experience with containerization and orchestration (Docker, Kubernetes)
+- Strong database skills (PostgreSQL, Redis, or similar)
+- Experience building and maintaining CI/CD pipelines
+- Excellent problem-solving and communication skills
+
+Preferred Qualifications:
+- Experience with real-time data processing frameworks (Apache Spark, Flink, or similar)
+- Familiarity with infrastructure-as-code tools (Terraform, Pulumi)
+- Experience with cloud platforms (AWS, GCP, or Azure)
+- Track record of mentoring junior engineers
+- Experience with event-driven architectures
+
+What We Offer:
+- Competitive salary and equity
+- Remote-first culture
+- Learning and development budget
+- Health, dental, and vision insurance

@@ -1,0 +1,27 @@
+Summary
+Results-driven software engineer with 5 years of experience building scalable web applications and distributed systems.
+
+Experience
+
+Acme Corp — Senior Software Engineer — Jan 2022 - Present
+- Architected and deployed a microservices platform handling 10M+ daily requests using Python and FastAPI
+- Reduced API response times by 35% through query optimization and Redis caching layer implementation
+- Led migration from monolithic architecture to event-driven microservices using Kafka and Docker
+- Mentored 3 junior engineers through code reviews and pair programming sessions
+- Implemented CI/CD pipelines using GitHub Actions reducing deployment time from 2 hours to 15 minutes
+
+TechStart Inc — Software Engineer — Jun 2019 - Dec 2021
+- Built real-time data processing pipeline using Apache Spark handling 500GB daily data volume
+- Developed RESTful APIs serving 50+ internal and external clients with 99.9% uptime
+- Designed and implemented PostgreSQL database schemas for multi-tenant SaaS platform
+- Collaborated with product team to deliver 12 features over 6 sprint cycles ahead of schedule
+- Created automated testing framework increasing code coverage from 45% to 89%
+
+Education
+
+State University — B.S. Computer Science — 2015-2019
+- Relevant coursework: Distributed Systems, Database Design, Machine Learning
+- Senior capstone project: Built a recommendation engine using collaborative filtering
+
+Skills
+Python, JavaScript, TypeScript, Go, SQL, FastAPI, Django, React, PostgreSQL, Redis, Kafka, Docker, Kubernetes, AWS, GitHub Actions, Terraform, Apache Spark, REST APIs, Microservices, CI/CD

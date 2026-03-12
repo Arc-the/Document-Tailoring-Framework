@@ -1,0 +1,21 @@
+# Environment / secrets
+.env
+
+# Output (generated resumes — may contain personal info)
+output/*
+!output/.gitkeep
+tailored_resume.txt
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+
+# Testing
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
