@@ -1,4 +1,4 @@
-"""Read resume/JD content from various file formats (txt, pdf, docx)."""
+"""Read document content from various file formats (txt, pdf, docx)."""
 
 import logging
 import re
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {".txt", ".pdf", ".docx"}
 
-# Bullet markers used in resumes
+# Bullet markers used in documents
 _BULLET_RE = re.compile(r"^\s*[-•*–▪▸▹►◦◉○▫▬]\s")
 
 # Section headers
@@ -48,7 +48,7 @@ def _is_structural_line(line: str) -> bool:
     """Check if a line is a bullet, section header, or experience header."""
     stripped = line.strip()
     if not stripped:
-        return True  # blank lines are structural boundaries
+        return True
     if _BULLET_RE.match(stripped):
         return True
     if _SECTION_RE.match(stripped.rstrip(":")):
@@ -59,41 +59,27 @@ def _is_structural_line(line: str) -> bool:
 
 
 def _rejoin_wrapped_lines(text: str) -> str:
-    """Rejoin lines that were wrapped by PDF column width.
-
-    PDF extraction often breaks long bullet points across multiple lines.
-    This function joins continuation lines back to their parent line.
-
-    A line is a continuation if:
-    - It's not blank
-    - It's not a bullet, section header, or experience entry header
-    - The previous non-blank line exists and doesn't end with a period-newline boundary
-    """
+    """Rejoin lines that were wrapped by PDF column width."""
     lines = text.split("\n")
     result = []
 
     for line in lines:
         stripped = line.strip()
 
-        # Empty lines pass through
         if not stripped:
             result.append("")
             continue
 
-        # Structural lines (bullets, headers) start a new line
         if _is_structural_line(stripped):
             result.append(line)
             continue
 
-        # Continuation line — append to previous non-blank line
         if result:
-            # Find the last non-blank line to append to
             for i in range(len(result) - 1, -1, -1):
                 if result[i].strip():
                     result[i] = result[i].rstrip() + " " + stripped
                     break
             else:
-                # No previous non-blank line, just add it
                 result.append(line)
         else:
             result.append(line)
@@ -102,10 +88,7 @@ def _rejoin_wrapped_lines(text: str) -> str:
 
 
 def _read_pdf(path: Path) -> str:
-    """Extract text from a PDF file using pdfplumber.
-
-    Includes line-rejoin logic to handle wrapped bullet points.
-    """
+    """Extract text from a PDF file using pdfplumber."""
     try:
         import pdfplumber
     except ImportError:

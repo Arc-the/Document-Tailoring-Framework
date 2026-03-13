@@ -1,7 +1,7 @@
 [project]
-name = "resume-tailor"
-version = "0.1.0"
-description = "LangGraph-powered resume tailoring pipeline"
+name = "doc-tailor"
+version = "0.2.0"
+description = "LangGraph-powered document tailoring pipeline"
 requires-python = ">=3.11"
 dependencies = [
     "langgraph>=0.2.0",
@@ -27,7 +27,7 @@ research = [
 ]
 
 [project.scripts]
-resume-tailor = "main:main"
+doc-tailor = "main:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]

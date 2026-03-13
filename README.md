@@ -1,6 +1,8 @@
-# Resume Tailor
+# Doc Tailor
 
-LangGraph-powered pipeline that tailors a resume to a specific job description. Six-node pipeline with evaluation loopback — produces a targeted resume while enforcing baseline truth (no invented metrics or fabricated experience).
+LangGraph-powered framework for tailoring documents to target specifications. Six-node pipeline with evaluation loopback — produces targeted output while enforcing baseline truth (no invented metrics or fabricated claims).
+
+Ships with a **resume plugin** out of the box. Extensible to cover letters, proposals, grant applications, or any "adapt document X to audience Y" task via the plugin system.
 
 ## Architecture
 
@@ -18,14 +20,29 @@ intake → research (optional) → extract_and_match → select_content → gene
 
 | Node | Purpose | LLM? |
 |---|---|---|
-| `intake` | Validate inputs, clean text artifacts, parse resume into structured form | No |
-| `research` | Web search for company context (optional) | Yes |
-| `extract_and_match` | Build evidence map linking JD requirements → resume bullets | Yes |
-| `select_content` | Decide suppressions + emphasis strategy | Partial — suppressions are deterministic, emphasis plan uses LLM |
-| `generate` | Write the tailored resume with source annotations | Yes |
+| `intake` | Validate inputs, clean text artifacts, parse source document via plugin | No |
+| `research` | Web search for company context (optional, Tavily) | Yes |
+| `extract_and_match` | Build evidence map linking target requirements → source document segments | Yes |
+| `select_content` | Decide suppressions + emphasis strategy | Partial — suppressions are deterministic (plugin), emphasis plan uses LLM |
+| `generate` | Write the tailored output with source annotations | Yes |
 | `evaluate` | Score on 7 rubric dimensions + sanity checks, route loopback | Partial — sanity checks are deterministic, scoring uses LLM |
 
-The **evidence map** is the central artifact. It's a structured mapping of every JD requirement to matching resume bullets, validated post-LLM to ensure all referenced bullets actually exist in the baseline resume.
+The **evidence map** is the central artifact. It's a structured mapping of every requirement to matching source text, validated post-LLM to ensure all referenced segments actually exist in the source document.
+
+## Plugin System
+
+Each document type is a plugin that provides:
+
+| Component | What it does |
+|---|---|
+| `parse_source` | Parses raw text into a structured model |
+| `get_matchable_text` | Returns all citable text segments |
+| `prompts` | All prompt templates for the document type |
+| `compute_suppressions` | Deterministic content selection logic |
+| `parse_output` | Extracts tailored output + annotations from LLM response |
+| `sanity_checks` | Document-type-specific evaluation checks |
+
+To add a new document type, create a plugin in `doc_tailor/plugins/` and call `register_plugin()`. See `doc_tailor/plugins/resume/` for the reference implementation.
 
 ## Setup
 
@@ -53,14 +70,18 @@ GOOGLE_API_KEY=your-key
 ## Usage
 
 ```bash
-# Basic usage (OpenAI) — accepts .txt, .pdf, or .docx
+# Basic usage (resume tailoring, OpenAI) — accepts .txt, .pdf, or .docx
+python main.py --source resume.pdf --target job_posting.txt
+
+# Backwards-compatible aliases
 python main.py --resume resume.pdf --job job_posting.txt
 
 # Gemini free tier
-python main.py -r resume.docx -j job.txt --provider gemini
+python main.py --source resume.docx --target job.txt --provider gemini
 
 # With options
-python main.py -r resume.txt -j job.txt \
+python main.py --source resume.txt --target job.txt \
+  --doc-type resume \
   --provider gemini \
   --model gemini-2.5-pro \
   --company "Acme Corp" \
@@ -74,15 +95,16 @@ python main.py -r resume.txt -j job.txt \
 
 | Flag | Description |
 |---|---|
-| `-r, --resume` | Path to baseline resume (`.txt`, `.pdf`, `.docx`) — **required** |
-| `-j, --job` | Path to job description (`.txt`, `.pdf`, `.docx`) — **required** |
+| `--source, --resume, -r` | Path to source document (`.txt`, `.pdf`, `.docx`) — **required** |
+| `--target, --job, -j` | Path to target specification (`.txt`, `.pdf`, `.docx`) — **required** |
+| `--doc-type` | Document type plugin to use (default: `resume`) |
 | `-p, --provider` | LLM provider: `openai` (default) or `gemini` |
 | `-m, --model` | Model name override (defaults: `gpt-4o`, `gemini-2.5-flash`) |
 | `-c, --company` | Company name (enables richer research) |
 | `--role` | Target role title |
-| `-o, --output` | Output file path (default: `tailored_resume.txt`) |
+| `-o, --output` | Output file path (default: `output/tailored_output.txt`) |
 | `--constraints` | JSON string for constraints (max_pages, tone, focus) |
-| `--max-experiences` | Max experience blocks to keep (default: 4, 0 = no limit) |
+| `--max-experiences` | Max experience blocks to keep (resume plugin, default: 4, 0 = no limit) |
 | `--research` | Enable web research via Tavily (requires `TAVILY_API_KEY`) |
 | `-v, --verbose` | Debug-level logging |
 
@@ -96,25 +118,25 @@ python -m pytest tests/ -v
 ## Project Structure
 
 ```
-resume_tailor/
-  state.py              # ResumeState TypedDict (graph state)
-  models.py             # Pydantic domain models (EvidenceMap, etc.)
-  config.py             # PipelineConfig + LLM provider factory
-  graph.py              # Graph wiring + conditional routing
-  nodes/                # One file per pipeline node
-  prompts/              # Prompt templates (separated from node logic)
-  parsers/              # File readers (txt/pdf/docx) + resume text → structured ParsedResume
+doc_tailor/
+  plugin.py               # DocumentTypePlugin + DocumentPrompts + registry
+  state.py                # TailoringState TypedDict (generic graph state)
+  models.py               # Generic Pydantic models (EvidenceMap, etc.)
+  config.py               # PipelineConfig + LLM provider factory
+  graph.py                # Graph wiring + conditional routing
+  nodes/                  # Generic node implementations (delegate to plugin)
+  prompts/                # Generic prompt fragments
+  parsers/                # File readers (txt/pdf/docx)
   utils/
-    validation.py       # Bullet matching, duplicate detection, sanity checks
+    validation.py         # Text matching, duplicate detection, sanity checks
+  plugins/
+    resume/               # Resume document type plugin
+      models.py           # ResumeBullet, ExperienceBlock, ParsedResume
+      parser.py           # Plain-text resume → structured ParsedResume
+      prompts.py          # Resume-specific prompt templates
+      content.py          # Experience block scoring + bullet target suppression
+      validation.py       # Verb tense consistency, annotation validation
 tests/
-  fixtures/             # Sample resume + job posting
-main.py                 # CLI entry point
+  fixtures/               # Sample resume + job posting
+main.py                   # CLI entry point
 ```
-
-## Key Design Decisions
-
-- **Evidence map is the spine** — every downstream decision traces back to it. Validated post-LLM with fuzzy matching (0.85 threshold via `SequenceMatcher`).
-- **Baseline truth is a hard constraint** — source annotations link every output bullet to its origin. No invented numbers.
-- **Suppressions are deterministic** — rule-based (no match → suppress, duplicate → keep strongest), not LLM-driven.
-- **Scoped loopback** — evidence failures re-run `extract_and_match`, surface failures only re-run `generate`. Max 3 iterations.
-- **Research is enrichment, not a dependency** — pipeline works well with just a JD and resume.

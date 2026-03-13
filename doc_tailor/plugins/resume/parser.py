@@ -5,7 +5,7 @@ nodes can reference specific bullets by experience_id.
 """
 
 import re
-from resume_tailor.models import ExperienceBlock, ParsedResume, ResumeBullet
+from doc_tailor.plugins.resume.models import ExperienceBlock, ParsedResume, ResumeBullet
 
 
 # Section headers commonly found in resumes
@@ -21,8 +21,7 @@ SECTION_PATTERNS = [
     (r"(?i)^(?:volunteer|community)", "volunteer"),
 ]
 
-# Pattern for experience entry headers: "Company Name — Role Title | Dates"
-# Flexible to handle various formats
+# Pattern for experience entry headers
 EXPERIENCE_HEADER_PATTERN = re.compile(
     r"^(.+?)\s*(?:[—\-–|,])\s*(.+?)(?:\s*(?:[—\-–|,])\s*(.+?))?$"
 )
@@ -60,26 +59,17 @@ def _extract_bullet_text(line: str) -> str:
 
 
 def _looks_like_entry_header(line: str) -> bool:
-    """Heuristic: does this line look like an experience entry header?
-
-    Checks for patterns like:
-    - "Company Name — Role Title"
-    - "Company | Role | Jan 2020 - Present"
-    - "Role Title, Company Name (2019-2022)"
-    """
+    """Heuristic: does this line look like an experience entry header?"""
     stripped = line.strip()
 
     if not stripped or len(stripped) < 5:
         return False
 
-    # Likely a bullet, not a header
     if _is_bullet(stripped):
         return False
 
-    # Has separator characters typical of headers
     has_separator = bool(re.search(r"[—\-–|]", stripped))
 
-    # Has a date-like pattern
     has_date = bool(re.search(
         r"(?:\d{4}|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\b.*\d{4}|Present|Current)",
         stripped,
@@ -90,12 +80,7 @@ def _looks_like_entry_header(line: str) -> bool:
 
 
 def parse_resume(text: str) -> ParsedResume:
-    """Parse a plain-text resume into a structured ParsedResume.
-
-    This is a best-effort parser. It handles common resume formats but may
-    not perfectly parse every resume. The parsed structure is used for
-    evidence map validation and bullet referencing.
-    """
+    """Parse a plain-text resume into a structured ParsedResume."""
     lines = text.strip().split("\n")
     parsed = ParsedResume(raw_text=text)
 
@@ -111,19 +96,15 @@ def parse_resume(text: str) -> ParsedResume:
         if not stripped:
             continue
 
-        # Check for section header
         section = _detect_section(stripped)
         if section:
-            # Save current block if any
             if current_block and current_block.bullets:
                 blocks.append(current_block)
                 current_block = None
             current_section = section
             continue
 
-        # Handle skills section
         if current_section == "skills":
-            # Parse skills as comma-separated or line-separated items
             items = re.split(r"[,;•|]", stripped)
             for item in items:
                 item = item.strip().strip("-•* ")
@@ -131,17 +112,14 @@ def parse_resume(text: str) -> ParsedResume:
                     parsed.skills.append(item)
             continue
 
-        # Handle summary section
         if current_section == "summary":
             summary_lines.append(stripped)
             continue
 
-        # Handle experience-like sections
         if current_section in ("experience", "education", "projects", "volunteer", ""):
             if _is_bullet(stripped):
                 bullet_text = _extract_bullet_text(stripped)
                 if current_block is None:
-                    # Orphan bullet — create a generic block
                     block_counter += 1
                     current_block = ExperienceBlock(
                         experience_id=f"block_{block_counter:03d}",
@@ -152,12 +130,10 @@ def parse_resume(text: str) -> ParsedResume:
                     experience_id=current_block.experience_id,
                 ))
             elif _looks_like_entry_header(stripped):
-                # Save previous block
                 if current_block and current_block.bullets:
                     blocks.append(current_block)
 
                 block_counter += 1
-                # Try to parse the header
                 match = EXPERIENCE_HEADER_PATTERN.match(stripped)
                 if match:
                     parts = [p.strip() for p in match.groups() if p]
@@ -177,9 +153,7 @@ def parse_resume(text: str) -> ParsedResume:
                     dates=dates,
                     section=current_section or "experience",
                 )
-            # else: non-bullet, non-header line in experience section — skip
 
-    # Don't forget the last block
     if current_block and current_block.bullets:
         blocks.append(current_block)
 

@@ -1,4 +1,4 @@
-"""Evaluate node — scores the tailored resume and decides whether to loop back.
+"""Evaluate node — scores the tailored document and decides whether to loop back.
 
 Combines deterministic sanity checks with LLM-based rubric scoring.
 """
@@ -9,15 +9,13 @@ import logging
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from resume_tailor.config import get_config
-from resume_tailor.models import EvaluationResult, SourceAnnotation
-from resume_tailor.prompts.evaluate import EVALUATE_SYSTEM, EVALUATE_USER
-from resume_tailor.state import ResumeState
-from resume_tailor.utils.validation import (
+from doc_tailor.config import get_config
+from doc_tailor.models import EvaluationResult
+from doc_tailor.plugin import get_plugin
+from doc_tailor.state import TailoringState
+from doc_tailor.utils.validation import (
     check_duplicate_bullets,
-    check_verb_tense_consistency,
     estimate_page_count,
-    validate_source_annotations,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,57 +37,41 @@ class LLMScores(BaseModel):
     )
 
 
-def _run_sanity_checks(state: ResumeState) -> dict[str, bool]:
-    """Run deterministic sanity checks on the tailored resume."""
-    resume = state.get("tailored_resume", "")
+def _run_generic_checks(state: TailoringState) -> dict[str, bool]:
+    """Run generic sanity checks on the tailored output."""
+    output = state.get("tailored_output", "")
     constraints = state.get("constraints", {})
 
     checks = {}
 
-    # Check 1: No duplicate bullets
-    duplicates = check_duplicate_bullets(resume)
+    # Check 1: No duplicate items
+    duplicates = check_duplicate_bullets(output)
     checks["no_duplicates"] = len(duplicates) == 0
     if duplicates:
-        logger.warning(f"Found {len(duplicates)} near-duplicate bullet pairs")
+        logger.warning(f"Found {len(duplicates)} near-duplicate item pairs")
 
-    # Check 2: Consistent verb tense
-    checks["consistent_tense"] = check_verb_tense_consistency(resume)
-
-    # Check 3: Page/length constraint
+    # Check 2: Page/length constraint
     max_pages = constraints.get("max_pages", 1)
-    estimated_pages = estimate_page_count(resume)
+    estimated_pages = estimate_page_count(output)
     checks["within_page_limit"] = estimated_pages <= max_pages
 
-    # Check 4: Source annotations exist
+    # Check 3: Source annotations exist
     annotations = state.get("source_annotations", [])
     checks["has_annotations"] = len(annotations) > 0
-
-    # Check 5: Validate source annotations against baseline
-    if annotations and state.get("parsed_resume"):
-        valid, invalid = validate_source_annotations(
-            annotations, state["parsed_resume"]
-        )
-        total = len(valid) + len(invalid)
-        checks["annotations_valid"] = (
-            len(invalid) == 0 if total > 0 else True
-        )
-        if invalid:
-            logger.warning(
-                f"{len(invalid)}/{total} source annotations reference "
-                f"non-existent baseline bullets"
-            )
-    else:
-        checks["annotations_valid"] = True
 
     return checks
 
 
-def evaluate_node(state: ResumeState) -> dict:
-    """Score the resume and determine if it passes or needs revision."""
+def evaluate_node(state: TailoringState) -> dict:
+    """Score the output and determine if it passes or needs revision."""
     config = get_config()
+    plugin = get_plugin(state.get("doc_type", "resume"))
 
-    # Step 1: Deterministic sanity checks
-    sanity_checks = _run_sanity_checks(state)
+    # Step 1: Generic sanity checks + plugin-specific checks
+    sanity_checks = _run_generic_checks(state)
+    plugin_checks = plugin.sanity_checks(state)
+    sanity_checks.update(plugin_checks)
+
     all_sanity_passed = all(sanity_checks.values())
     logger.info(f"Sanity checks: {sanity_checks}")
 
@@ -98,24 +80,26 @@ def evaluate_node(state: ResumeState) -> dict:
         [m.model_dump() for m in state.get("evidence_map", [])], indent=2
     )
     annotations_json = json.dumps(
-        [a.model_dump() for a in state.get("source_annotations", [])], indent=2
+        [a.model_dump() if hasattr(a, 'model_dump') else a
+         for a in state.get("source_annotations", [])],
+        indent=2,
     )
     constraints_json = json.dumps(state.get("constraints", {}), indent=2)
 
     llm = config.get_llm(temperature=0.1)
     structured_llm = llm.with_structured_output(LLMScores)
 
-    prompt_text = EVALUATE_USER.format(
-        tailored_resume=state.get("tailored_resume", ""),
+    prompt_text = plugin.prompts.evaluate_user.format(
+        tailored_output=state.get("tailored_output", ""),
         annotations_json=annotations_json,
         evidence_map_json=evidence_map_json,
-        baseline_resume=state["baseline_resume"],
+        source_document=state["source_document"],
         job_description=state["job_description"],
         constraints_json=constraints_json,
     )
 
     llm_scores: LLMScores = structured_llm.invoke([
-        SystemMessage(content=EVALUATE_SYSTEM),
+        SystemMessage(content=plugin.prompts.evaluate_system),
         HumanMessage(content=prompt_text),
     ])
 
@@ -145,7 +129,6 @@ def evaluate_node(state: ResumeState) -> dict:
         else:
             failure_level = "surface"
 
-        # Append sanity check failures to critique
         failed_checks = [k for k, v in sanity_checks.items() if not v]
         if failed_checks:
             sanity_feedback = f"\n\nSanity check failures: {', '.join(failed_checks)}"

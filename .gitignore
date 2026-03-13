@@ -1,10 +1,9 @@
 # Environment / secrets
 .env
 
-# Output (generated resumes — may contain personal info)
+# Output (generated documents — may contain personal info)
 output/*
 !output/.gitkeep
-tailored_resume.txt
 
 # Python
 __pycache__/

@@ -1,7 +1,7 @@
 """Tests for resume parsing."""
 
 import pytest
-from resume_tailor.parsers.resume_parser import parse_resume
+from doc_tailor.plugins.resume.parser import parse_resume
 
 
 SAMPLE_RESUME = """Summary
@@ -35,7 +35,6 @@ class TestParseResume:
 
     def test_finds_experience_blocks(self):
         parsed = parse_resume(SAMPLE_RESUME)
-        # Should find at least the two main experience entries
         exp_blocks = [b for b in parsed.experience_blocks if b.section == "experience"]
         assert len(exp_blocks) >= 2
 
@@ -43,7 +42,6 @@ class TestParseResume:
         parsed = parse_resume(SAMPLE_RESUME)
         all_bullets = parsed.all_bullets()
         assert len(all_bullets) >= 5
-        # Check a known bullet exists
         bullet_texts = [b.text for b in all_bullets]
         assert any("microservices" in b.lower() for b in bullet_texts)
 

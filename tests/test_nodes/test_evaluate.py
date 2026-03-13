@@ -1,8 +1,8 @@
 """Tests for the evaluate node's deterministic components."""
 
 import pytest
-from resume_tailor.graph import route_after_eval
-from resume_tailor.models import EvaluationResult
+from doc_tailor.graph import route_after_eval
+from doc_tailor.models import EvaluationResult
 
 
 def _make_state(passed: bool, failure_level: str = "", iteration_count: int = 1):

@@ -1,4 +1,4 @@
-"""CLI entry point for the resume tailoring pipeline."""
+"""CLI entry point for the document tailoring pipeline."""
 
 import argparse
 import json
@@ -8,9 +8,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from resume_tailor.graph import build_graph
-from resume_tailor.config import PipelineConfig, set_config
-from resume_tailor.parsers.file_reader import read_file
+from doc_tailor.graph import build_graph
+from doc_tailor.config import PipelineConfig, set_config
+from doc_tailor.parsers.file_reader import read_file
+from doc_tailor.plugin import get_plugin
 
 
 def setup_logging(verbose: bool = False):
@@ -26,17 +27,24 @@ def main():
     load_dotenv()
 
     parser = argparse.ArgumentParser(
-        description="Tailor a resume to a specific job description"
+        description="Tailor a document to a specific target specification"
     )
     parser.add_argument(
-        "--resume", "-r",
+        "--source", "--resume", "-r",
         required=True,
-        help="Path to baseline resume (.txt, .pdf, or .docx)",
+        dest="source",
+        help="Path to source document (.txt, .pdf, or .docx)",
     )
     parser.add_argument(
-        "--job", "-j",
+        "--target", "--job", "-j",
         required=True,
-        help="Path to job description (.txt, .pdf, or .docx)",
+        dest="target",
+        help="Path to target specification (.txt, .pdf, or .docx)",
+    )
+    parser.add_argument(
+        "--doc-type",
+        default="resume",
+        help="Document type plugin to use (default: resume)",
     )
     parser.add_argument(
         "--company", "-c",
@@ -50,8 +58,8 @@ def main():
     )
     parser.add_argument(
         "--output", "-o",
-        default="output/tailored_resume.txt",
-        help="Output file path (default: output/tailored_resume.txt)",
+        default="output/tailored_output.txt",
+        help="Output file path (default: output/tailored_output.txt)",
     )
     parser.add_argument(
         "--constraints",
@@ -67,13 +75,13 @@ def main():
     parser.add_argument(
         "--model", "-m",
         default=None,
-        help="Model name override (default: gpt-4o for openai, gemini-2.0-flash for gemini)",
+        help="Model name override (default: gpt-4o for openai, gemini-2.5-flash for gemini)",
     )
     parser.add_argument(
         "--max-experiences",
         type=int,
-        default=4,
-        help="Max experience blocks to keep (default: 4, 0 = no limit)",
+        default=None,
+        help="Max experience blocks to keep (resume plugin, default: 4, 0 = no limit)",
     )
     parser.add_argument(
         "--research",
@@ -91,19 +99,19 @@ def main():
     logger = logging.getLogger("main")
 
     # Read input files
-    resume_path = Path(args.resume)
-    job_path = Path(args.job)
+    source_path = Path(args.source)
+    target_path = Path(args.target)
 
-    if not resume_path.exists():
-        logger.error(f"Resume file not found: {resume_path}")
+    if not source_path.exists():
+        logger.error(f"Source file not found: {source_path}")
         sys.exit(1)
-    if not job_path.exists():
-        logger.error(f"Job description file not found: {job_path}")
+    if not target_path.exists():
+        logger.error(f"Target file not found: {target_path}")
         sys.exit(1)
 
     try:
-        baseline_resume = read_file(resume_path)
-        job_description = read_file(job_path)
+        source_document = read_file(source_path)
+        job_description = read_file(target_path)
     except (ValueError, ImportError) as e:
         logger.error(str(e))
         sys.exit(1)
@@ -126,22 +134,30 @@ def main():
     else:
         model_name = "gpt-4o"
 
+    # Build plugin config from defaults + CLI overrides
+    doc_type = args.doc_type
+    plugin = get_plugin(doc_type)
+    plugin_config = dict(plugin.default_plugin_config)
+    if args.max_experiences is not None:
+        plugin_config["max_experiences"] = args.max_experiences
+
     config = PipelineConfig(
         provider=provider,
         model_name=model_name,
         enable_research=args.research,
-        max_experiences=args.max_experiences,
+        plugin_config=plugin_config,
     )
     set_config(config)
     logger.info(f"Using {provider} / {model_name}")
 
     # Build and run the graph
     logger.info("Building pipeline...")
-    app = build_graph()
+    app = build_graph(doc_type=doc_type)
 
     initial_state = {
+        "doc_type": doc_type,
         "job_description": job_description,
-        "baseline_resume": baseline_resume,
+        "source_document": source_document,
         "company_name": args.company,
         "target_role": args.role,
         "constraints": constraints,
@@ -151,17 +167,18 @@ def main():
     result = app.invoke(initial_state)
 
     # Output results
-    tailored_resume = result.get("tailored_resume", "")
+    tailored_output = result.get("tailored_output", "")
     evaluation = result.get("evaluation")
 
-    if not tailored_resume:
+    if not tailored_output:
         logger.error("Pipeline produced no output")
         sys.exit(1)
 
     # Write output
     output_path = Path(args.output)
-    output_path.write_text(tailored_resume, encoding="utf-8")
-    logger.info(f"Tailored resume written to: {output_path}")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(tailored_output, encoding="utf-8")
+    logger.info(f"Tailored output written to: {output_path}")
 
     # Print evaluation summary
     if evaluation:
@@ -170,12 +187,12 @@ def main():
         print(f"Iterations: {result.get('iteration_count', 0)}")
         print("Scores:")
         for dim, score in evaluation.scores.items():
-            status = "✓" if score >= 7.0 else "✗"
+            status = "PASS" if score >= 7.0 else "FAIL"
             print(f"  {status} {dim}: {score:.1f}")
         if evaluation.critique:
             print(f"\nFeedback: {evaluation.critique}")
 
-    print(f"\nResume saved to: {output_path}")
+    print(f"\nOutput saved to: {output_path}")
 
 
 if __name__ == "__main__":

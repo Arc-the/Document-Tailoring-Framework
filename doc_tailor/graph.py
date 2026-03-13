@@ -1,4 +1,4 @@
-"""Graph wiring and compilation for the resume tailoring pipeline.
+"""Graph wiring and compilation for the document tailoring pipeline.
 
 intake → research → extract_and_match → select_content → generate → evaluate
                             ↑                                         |
@@ -11,8 +11,8 @@ intake → research → extract_and_match → select_content → generate → ev
 
 from langgraph.graph import StateGraph, END
 
-from resume_tailor.config import PipelineConfig
-from resume_tailor.nodes import (
+from doc_tailor.config import get_config
+from doc_tailor.nodes import (
     evaluate_node,
     extract_and_match_node,
     generate_node,
@@ -20,18 +20,12 @@ from resume_tailor.nodes import (
     research_node,
     select_content_node,
 )
-from resume_tailor.state import ResumeState
+from doc_tailor.state import TailoringState
 
 
-def route_after_eval(state: ResumeState) -> str:
-    """Conditional routing after evaluation.
-
-    - pass: all scores meet threshold → END
-    - retry_evidence: truthfulness/evidence failure → back to extract_and_match
-    - retry_generation: surface issues → back to generate
-    - fail: max retries reached → END with best attempt
-    """
-    config = PipelineConfig()
+def route_after_eval(state: TailoringState) -> str:
+    """Conditional routing after evaluation."""
+    config = get_config()
     ev = state["evaluation"]
 
     if ev.passed:
@@ -46,9 +40,9 @@ def route_after_eval(state: ResumeState) -> str:
     return "retry_generation"
 
 
-def build_graph() -> StateGraph:
-    """Build and compile the resume tailoring graph."""
-    graph = StateGraph(ResumeState)
+def build_graph(doc_type: str = "resume") -> StateGraph:
+    """Build and compile the document tailoring graph."""
+    graph = StateGraph(TailoringState)
 
     # Add nodes
     graph.add_node("intake", intake_node)

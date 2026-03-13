@@ -1,7 +1,7 @@
 """Extract & Match node — the most critical node in the pipeline.
 
-Reads the full JD and resume together, outputs a structured evidence map.
-This is the spine of the entire pipeline. Invest the most prompt engineering here.
+Reads the full target spec and source document, outputs a structured evidence map.
+This is the spine of the entire pipeline.
 """
 
 import logging
@@ -9,20 +9,16 @@ import logging
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from resume_tailor.config import get_config
-from resume_tailor.models import (
+from doc_tailor.config import get_config
+from doc_tailor.models import (
     EvidenceEntry,
-    EvidenceMap,
     MatchStrength,
     PriorityTier,
     RequirementMapping,
 )
-from resume_tailor.prompts.extract_and_match import (
-    EXTRACT_AND_MATCH_SYSTEM,
-    EXTRACT_AND_MATCH_USER,
-)
-from resume_tailor.state import ResumeState
-from resume_tailor.utils.validation import find_best_bullet_match
+from doc_tailor.plugin import get_plugin
+from doc_tailor.state import TailoringState
+from doc_tailor.utils.validation import find_best_match
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +26,13 @@ logger = logging.getLogger(__name__)
 # --- Structured output models for the LLM ---
 
 class LLMEvidenceEntry(BaseModel):
-    source_bullet: str = Field(description="Exact text of a bullet from the resume")
-    experience_id: str = Field(description="ID of the experience block")
+    source_text: str = Field(description="Exact text from the source document")
+    section_id: str = Field(description="ID of the section/block")
     match_strength: MatchStrength
     relevance_note: str
 
 class LLMRequirementMapping(BaseModel):
-    requirement: str = Field(description="A specific requirement from the job description")
+    requirement: str = Field(description="A specific requirement from the target spec")
     priority: PriorityTier
     evidence: list[LLMEvidenceEntry] = Field(default_factory=list)
 
@@ -47,11 +43,13 @@ class LLMEvidenceMap(BaseModel):
     )
 
 
-def extract_and_match_node(state: ResumeState) -> dict:
+def extract_and_match_node(state: TailoringState) -> dict:
     """Build the evidence map — the central artifact of the pipeline."""
     config = get_config()
-    parsed_resume = state["parsed_resume"]
-    actual_bullets = parsed_resume.get_all_matchable_text()
+    plugin = get_plugin(state.get("doc_type", "resume"))
+
+    parsed_source = state["parsed_source"]
+    actual_texts = plugin.get_matchable_text(parsed_source)
 
     # Build research section for prompt
     research_context = state.get("research_context", {})
@@ -69,18 +67,18 @@ def extract_and_match_node(state: ResumeState) -> dict:
     llm = config.get_llm()
     structured_llm = llm.with_structured_output(LLMEvidenceMap)
 
-    prompt_text = EXTRACT_AND_MATCH_USER.format(
+    prompt_text = plugin.prompts.extract_and_match_user.format(
         job_description=state["job_description"],
-        baseline_resume=state["baseline_resume"],
+        source_document=state["source_document"],
         research_section=research_section,
     )
 
     raw_map: LLMEvidenceMap = structured_llm.invoke([
-        SystemMessage(content=EXTRACT_AND_MATCH_SYSTEM),
+        SystemMessage(content=plugin.prompts.extract_and_match_system),
         HumanMessage(content=prompt_text),
     ])
 
-    # --- Post-LLM validation: verify every source_bullet exists in the resume ---
+    # --- Post-LLM validation: verify every source_text exists in the document ---
     validated_mappings: list[RequirementMapping] = []
     total_entries = 0
     rejected_count = 0
@@ -90,24 +88,24 @@ def extract_and_match_node(state: ResumeState) -> dict:
 
         for raw_entry in raw_mapping.evidence:
             total_entries += 1
-            matched_bullet = find_best_bullet_match(
-                raw_entry.source_bullet,
-                actual_bullets,
-                threshold=config.bullet_match_threshold,
+            matched_text = find_best_match(
+                raw_entry.source_text,
+                actual_texts,
+                threshold=config.match_threshold,
             )
 
-            if matched_bullet is not None:
+            if matched_text is not None:
                 validated_evidence.append(EvidenceEntry(
-                    source_bullet=matched_bullet,  # use exact text from resume
-                    experience_id=raw_entry.experience_id,
+                    source_text=matched_text,
+                    section_id=raw_entry.section_id,
                     match_strength=raw_entry.match_strength,
                     relevance_note=raw_entry.relevance_note,
                 ))
             else:
                 rejected_count += 1
                 logger.warning(
-                    f"Rejected evidence entry — no matching bullet found: "
-                    f"'{raw_entry.source_bullet[:80]}...'"
+                    f"Rejected evidence entry — no matching text found: "
+                    f"'{raw_entry.source_text[:80]}...'"
                 )
 
         validated_mappings.append(RequirementMapping(

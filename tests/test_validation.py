@@ -1,14 +1,14 @@
 """Tests for deterministic validation utilities."""
 
 import pytest
-from resume_tailor.utils.validation import (
+from doc_tailor.utils.validation import (
     normalize_text,
     fuzzy_match_score,
-    find_best_bullet_match,
+    find_best_match,
     check_duplicate_bullets,
-    check_verb_tense_consistency,
     estimate_page_count,
 )
+from doc_tailor.plugins.resume.validation import check_verb_tense_consistency
 
 
 class TestNormalizeText:
@@ -42,37 +42,37 @@ class TestFuzzyMatchScore:
         assert score > 0.7
 
 
-class TestFindBestBulletMatch:
+class TestFindBestMatch:
     def test_exact_match(self):
-        bullets = {"Built a REST API", "Managed a team of 5"}
-        result = find_best_bullet_match("Built a REST API", bullets)
+        texts = {"Built a REST API", "Managed a team of 5"}
+        result = find_best_match("Built a REST API", texts)
         assert result == "Built a REST API"
 
     def test_exact_match_after_normalization(self):
-        bullets = {"Built a REST API"}
-        result = find_best_bullet_match("Built  a  REST  API", bullets)
+        texts = {"Built a REST API"}
+        result = find_best_match("Built  a  REST  API", texts)
         assert result == "Built a REST API"
 
     def test_fuzzy_match_above_threshold(self):
-        bullets = {"Reduced API response times by 35% through query optimization and Redis caching"}
-        result = find_best_bullet_match(
+        texts = {"Reduced API response times by 35% through query optimization and Redis caching"}
+        result = find_best_match(
             "Reduced API response times by 35% through query optimization and Redis caching layer",
-            bullets,
+            texts,
             threshold=0.85,
         )
         assert result is not None
 
     def test_no_match_below_threshold(self):
-        bullets = {"Built a machine learning model"}
-        result = find_best_bullet_match(
+        texts = {"Built a machine learning model"}
+        result = find_best_match(
             "Managed a large distributed database",
-            bullets,
+            texts,
             threshold=0.85,
         )
         assert result is None
 
-    def test_empty_bullets(self):
-        result = find_best_bullet_match("anything", set())
+    def test_empty_texts(self):
+        result = find_best_match("anything", set())
         assert result is None
 
 
@@ -94,7 +94,6 @@ class TestCheckDuplicateBullets:
         text = """- Led team
 - Led team
 - Built a comprehensive data pipeline"""
-        # Short bullets (< 20 chars) are ignored
         duplicates = check_duplicate_bullets(text)
         assert len(duplicates) == 0
 

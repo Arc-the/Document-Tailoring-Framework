@@ -1,28 +1,29 @@
-"""LangGraph state definition for the resume tailoring pipeline."""
+"""LangGraph state definition for the document tailoring pipeline."""
 
-from typing import Annotated, TypedDict
+from typing import Any, TypedDict
 
-from resume_tailor.models import (
+from doc_tailor.models import (
     EmphasisPlan,
     EvaluationResult,
-    ParsedResume,
     RequirementMapping,
-    SourceAnnotation,
     SuppressionEntry,
 )
 
 
-class ResumeState(TypedDict, total=False):
+class TailoringState(TypedDict, total=False):
+    # --- Plugin metadata ---
+    doc_type: str  # "resume", "cover_letter", etc.
+
     # --- Intake (step 1) ---
     job_description: str
     company_name: str
     target_role: str
-    baseline_resume: str
-    parsed_resume: ParsedResume
-    constraints: dict  # e.g. {"max_pages": 1, "tone": "conservative"}
+    source_document: str  # was "baseline_resume"
+    parsed_source: Any  # plugin-specific parsed model
+    constraints: dict
 
     # --- Research (step 2) ---
-    research_context: dict  # keyed by category: resume_relevant, supplementary, etc.
+    research_context: dict
 
     # --- Extract & Match (step 3) ---
     evidence_map: list[RequirementMapping]
@@ -32,8 +33,8 @@ class ResumeState(TypedDict, total=False):
     emphasis_plan: EmphasisPlan
 
     # --- Generate (step 5) ---
-    tailored_resume: str
-    source_annotations: list[SourceAnnotation]
+    tailored_output: str  # was "tailored_resume"
+    source_annotations: list[Any]  # plugin-specific annotation model
     iteration_count: int
 
     # --- Evaluate (step 6) ---
