@@ -67,15 +67,9 @@ def main():
         help='JSON string of constraints, e.g. \'{"max_pages": 1, "tone": "technical"}\'',
     )
     parser.add_argument(
-        "--provider", "-p",
-        default="openai",
-        choices=["openai", "gemini"],
-        help="LLM provider (default: openai)",
-    )
-    parser.add_argument(
         "--model", "-m",
         default=None,
-        help="Model name override (default: gpt-4o for openai, gemini-2.5-flash for gemini)",
+        help="OpenRouter model slug (e.g. 'google/gemma-4-31b-it', 'anthropic/claude-sonnet-4.6'). Defaults to PipelineConfig.model_name.",
     )
     parser.add_argument(
         "--max-experiences",
@@ -125,15 +119,6 @@ def main():
             logger.error("Invalid JSON in --constraints")
             sys.exit(1)
 
-    # Configure pipeline
-    provider = args.provider
-    if args.model:
-        model_name = args.model
-    elif provider == "gemini":
-        model_name = "gemini-2.5-flash"
-    else:
-        model_name = "gpt-4o"
-
     # Build plugin config from defaults + CLI overrides
     doc_type = args.doc_type
     plugin = get_plugin(doc_type)
@@ -141,14 +126,16 @@ def main():
     if args.max_experiences is not None:
         plugin_config["max_experiences"] = args.max_experiences
 
-    config = PipelineConfig(
-        provider=provider,
-        model_name=model_name,
-        enable_research=args.research,
-        plugin_config=plugin_config,
-    )
+    config_kwargs = {
+        "enable_research": args.research,
+        "plugin_config": plugin_config,
+    }
+    if args.model:
+        config_kwargs["model_name"] = args.model
+
+    config = PipelineConfig(**config_kwargs)
     set_config(config)
-    logger.info(f"Using {provider} / {model_name}")
+    logger.info(f"Using OpenRouter / {config.model_name}")
 
     # Build and run the graph
     logger.info("Building pipeline...")

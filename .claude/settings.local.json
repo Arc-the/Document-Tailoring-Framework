@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(cd \"C:\\\\Users\\\\AdamZ\\\\Desktop\\\\Work\\\\LangGraph_Resume_Agent\" && python -m pytest tests/ -v --tb=no 2>&1 | grep -E \"PASSED|FAILED|ERROR\")",
-      "Bash(cd \"C:\\\\Users\\\\AdamZ\\\\Desktop\\\\Work\\\\LangGraph_Resume_Agent\" && python -m pytest tests/ -x -q 2>&1)"
-    ]
-  }
-}

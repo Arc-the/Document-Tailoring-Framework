@@ -1,5 +1,6 @@
 """Runtime configuration for the document tailoring pipeline."""
 
+import os
 from dataclasses import dataclass, field
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -7,9 +8,8 @@ from langchain_core.language_models.chat_models import BaseChatModel
 
 @dataclass
 class PipelineConfig:
-    # LLM settings
-    provider: str = "openai"  # "openai" or "gemini"
-    model_name: str = "gpt-4o"
+    # LLM settings — all models routed via OpenRouter (OpenAI-compatible gateway)
+    model_name: str = "google/gemma-4-31b-it"
     temperature: float = 0.2
     generation_temperature: float = 0.4
 
@@ -31,21 +31,18 @@ class PipelineConfig:
     plugin_config: dict = field(default_factory=dict)
 
     def get_llm(self, temperature: float | None = None) -> BaseChatModel:
-        """Create an LLM instance based on the configured provider."""
-        temp = temperature if temperature is not None else self.temperature
-
-        if self.provider == "gemini":
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            return ChatGoogleGenerativeAI(
-                model=self.model_name,
-                temperature=temp,
-            )
-
-        # Default: OpenAI
+        """Create an LLM instance routed through OpenRouter."""
         from langchain_openai import ChatOpenAI
+
         return ChatOpenAI(
             model=self.model_name,
-            temperature=temp,
+            temperature=temperature if temperature is not None else self.temperature,
+            base_url="https://openrouter.ai/api/v1",
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+            default_headers={
+                "HTTP-Referer": "https://github.com/doc-tailor",
+                "X-Title": "doc-tailor",
+            },
         )
 
 

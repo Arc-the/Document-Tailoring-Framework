@@ -60,36 +60,42 @@ cp .env.example .env
 ```
 
 ```
-# OpenAI (default)
-OPENAI_API_KEY=your-key
-
-# Gemini (free tier available)
-GOOGLE_API_KEY=your-key
+# OpenRouter — unified gateway to every frontier + open-weight model
+OPENROUTER_API_KEY=your-key
 ```
+
+All LLM calls route through [OpenRouter](https://openrouter.ai), which exposes Claude, GPT, Gemini, Llama, Gemma, Qwen, DeepSeek, etc. behind one OpenAI-compatible endpoint. Get a key at [openrouter.ai/keys](https://openrouter.ai/keys), browse models at [openrouter.ai/models](https://openrouter.ai/models).
 
 ## Usage
 
 ```bash
-# Basic usage (resume tailoring, OpenAI) — accepts .txt, .pdf, or .docx
+# Basic usage (resume tailoring) — accepts .txt, .pdf, or .docx
 python main.py --source resume.pdf --target job_posting.txt
 
 # Backwards-compatible aliases
 python main.py --resume resume.pdf --job job_posting.txt
 
-# Gemini free tier
-python main.py --source resume.docx --target job.txt --provider gemini
+# Pick a specific model (any OpenRouter slug works)
+python main.py --source resume.docx --target job.txt --model anthropic/claude-sonnet-4.6
 
 # With options
 python main.py --source resume.txt --target job.txt \
   --doc-type resume \
-  --provider gemini \
-  --model gemini-2.5-pro \
+  --model google/gemma-4-31b-it \
   --company "Acme Corp" \
   --role "Senior Backend Engineer" \
   --output tailored.txt \
   --constraints '{"max_pages": 1, "tone": "technical"}' \
   --verbose
 ```
+
+### Model picks
+
+| Tier | Slug | Notes |
+|---|---|---|
+| Cheap / open | `google/gemma-4-31b-it` (default) | Open-weight, fast, strong value |
+| Balanced | `anthropic/claude-haiku-4.5` | Quality jump for eval/critique loop |
+| Quality | `anthropic/claude-sonnet-4.6` or `google/gemini-3-pro` | Frontier-tier |
 
 ### CLI Flags
 
@@ -98,8 +104,7 @@ python main.py --source resume.txt --target job.txt \
 | `--source, --resume, -r` | Path to source document (`.txt`, `.pdf`, `.docx`) — **required** |
 | `--target, --job, -j` | Path to target specification (`.txt`, `.pdf`, `.docx`) — **required** |
 | `--doc-type` | Document type plugin to use (default: `resume`) |
-| `-p, --provider` | LLM provider: `openai` (default) or `gemini` |
-| `-m, --model` | Model name override (defaults: `gpt-4o`, `gemini-2.5-flash`) |
+| `-m, --model` | OpenRouter model slug (default: `google/gemma-4-31b-it`) |
 | `-c, --company` | Company name (enables richer research) |
 | `--role` | Target role title |
 | `-o, --output` | Output file path (default: `output/tailored_output.txt`) |
@@ -122,7 +127,7 @@ doc_tailor/
   plugin.py               # DocumentTypePlugin + DocumentPrompts + registry
   state.py                # TailoringState TypedDict (generic graph state)
   models.py               # Generic Pydantic models (EvidenceMap, etc.)
-  config.py               # PipelineConfig + LLM provider factory
+  config.py               # PipelineConfig + OpenRouter-backed LLM factory
   graph.py                # Graph wiring + conditional routing
   nodes/                  # Generic node implementations (delegate to plugin)
   prompts/                # Generic prompt fragments
